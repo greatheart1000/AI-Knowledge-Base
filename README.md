@@ -1,7 +1,7 @@
 ## 文本提示词+全量参数
 ### 指定生成视频的宽高比为16:9，时长为 5 秒，帧率为 24 fps，分辨率为720p，包含水印，种子整数为11，不固定摄像头 参数使用简写
 
-"""python//"content": [
+"""p"content": [
         {
             "type": "text",
             "text": "女孩抱着狐狸 --rs 720p --rt 16:9 --dur 5 --fps 24 --wm true --seed 11 --cf false"
@@ -12,7 +12,7 @@
                 "url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/i2v_foxrgirl.png"
             }
         }
-    ] function hello() { console.log("Hello!"); }
+    ] """
 ## 图生视频首尾帧
 curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks \
   -H "Content-Type: application/json" \
