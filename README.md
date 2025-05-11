@@ -60,4 +60,16 @@ curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
         }
     ]
 }'
+
+本接口支持文生视频（t2v）和图生视频（i2v）： 
+doubao-seedance
+文生视频：doubao-seedance-1-0-lite-t2v，根据您输入的文本提示词+参数（可选）生成目标视频。
+图生视频：doubao-seedance-1-0-lite-i2v，根据您输入的首帧图片+文本提示词（可选）+参数（可选）生成目标视频。
+doubao-seaweed
+文生视频：doubao-seaweed，根据您输入的文本提示词+参数（可选）生成目标视频。
+图生视频：doubao-seaweed，根据您输入的首帧图片+文本提示词（可选）+参数（可选）生成目标视频。
+wan2.1-14b
+文生视频：wan2-1-14b-t2v，根据您输入的文本提示词+参数（可选）生成目标视频。
+图生视频：wan2-1-14b-i2v，根据您输入的首帧图片+文本提示词+参数（可选）生成目标视频。
+图生视频-首尾帧：wan2-1-14b-flf2v，根据您输入的首帧图片+尾帧图片+文本提示词+参数（可选）生成目标视频。
     
