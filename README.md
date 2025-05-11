@@ -1,6 +1,5 @@
-文本提示词+全量参数
-指定生成视频的宽高比为16:9，时长为 5 秒，帧率为 24 fps，分辨率为720p，包含水印，种子整数为11，不固定摄像头
-参数使用简写
+## 文本提示词+全量参数
+### 指定生成视频的宽高比为16:9，时长为 5 秒，帧率为 24 fps，分辨率为720p，包含水印，种子整数为11，不固定摄像头 参数使用简写
 "content": [
         {
             "type": "text",
@@ -13,7 +12,7 @@
             }
         }
     ]
-图生视频首尾帧
+## 图生视频首尾帧
 curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ARK_API_KEY" \
@@ -41,7 +40,7 @@ curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
     ]
 }'
 
-图生视频 首帧
+## 图生视频 首帧
 curl -X POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ARK_API_KEY" \
