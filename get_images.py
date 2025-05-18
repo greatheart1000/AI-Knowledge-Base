@@ -68,3 +68,42 @@ if __name__ == "__main__":
         print(f"错误：找不到文件 '{excel_file}'。")
     except Exception as e:
         print(f"发生错误: {e}")
+
+查看images文件夹有多少张图片的脚本
+import os
+import sys
+
+# 默认要查看的文件夹路径
+# 你也可以在运行脚本时通过命令行参数指定路径
+DEFAULT_FOLDER_PATH = './images' # 根据你的实际文件夹名称修改这里
+
+def count_files_in_folder(folder_path):
+    """
+    计算指定文件夹中的文件和子文件夹数量。
+    """
+    if not os.path.isdir(folder_path):
+        print(f"错误：文件夹不存在或不是一个有效的文件夹路径: {folder_path}")
+        return None
+
+    try:
+        # 获取文件夹中所有文件和子文件夹的列表
+        entries = os.listdir(folder_path)
+        # 计算列表的长度，即文件和子文件夹的数量
+        count = len(entries)
+        return count
+    except Exception as e:
+        print(f"错误：无法访问文件夹 {folder_path} 的内容：{e}")
+        return None
+
+if __name__ == "__main__":
+    # 检查是否有命令行参数指定文件夹路径
+    if len(sys.argv) > 1:
+        folder_to_check = sys.argv[1]
+    else:
+        folder_to_check = DEFAULT_FOLDER_PATH
+        print(f"未指定文件夹路径，使用默认路径: {folder_to_check}")
+
+    file_count = count_files_in_folder(folder_to_check)
+
+    if file_count is not None:
+        print(f"文件夹 '{folder_to_check}' 中共有 {file_count} 个条目 (包括文件和子文件夹)。")
