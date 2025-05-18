@@ -1,3 +1,5 @@
+#LLaMA-Factory 微调Qwen2.5VL 链接  https://zhuanlan.zhihu.com/p/1903485169010210107
+
 import os,csv
 import torch
 from datasets import Dataset
