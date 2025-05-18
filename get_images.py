@@ -143,6 +143,8 @@ if __name__ == "__main__":
     folder = "/root/autodl-tmp/train_images"  # 修改为你的图片文件夹路径
     check_and_remove_corrupted_images(folder)
 
+##基于下载文件夹呃呃脚本以及查看并删除损坏的图片以后制作数据集脚本
+
 
 
 
