@@ -1,3 +1,5 @@
+LLaMA-Factory 微调Qwen2.5VL 链接  https://zhuanlan.zhihu.com/p/1903485169010210107
+
 训练时 OSError: image file is truncated (** bytes not processed) 问题解决 链接：
 以下两个链接： 
 https://blog.csdn.net/chhj_292/article/details/137281590 
