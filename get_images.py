@@ -145,6 +145,95 @@ if __name__ == "__main__":
 
 ##基于下载文件夹呃呃脚本以及查看并删除损坏的图片以后制作数据集脚本
 
+下面的是更有效的删除破损图片的代码 
+import os
+from PIL import Image, ImageOps # 导入 Pillow 库
+# from io import BytesIO # BytesIO 在这个脚本中没有直接用到，但保留了用户原有的导入
+
+# —— 配置区 ——
+# 请将这里的路径替换为你实际存放图片的文件夹路径
+image_directory_path = r'D:\project\myfirstgo\downloaded_images_to_clean'
+# —— 配置结束 ——
+
+def main():
+    """
+    扫描指定目录，检查图片文件有效性，并删除无效文件。
+    """
+    print(f"--- 开始检查和清理图片目录: {image_directory_path} ---")
+
+    # 检查目录是否存在且是一个目录
+    if not os.path.isdir(image_directory_path):
+        print(f"错误：指定的图片目录不存在或不是一个目录：{image_directory_path}")
+        return
+
+    try:
+        # 获取目录中的所有文件和文件夹列表
+        items_in_directory = os.listdir(image_directory_path)
+    except Exception as e:
+        print(f"扫描目录时发生错误：{e}")
+        return
+
+    total_items = len(items_in_directory)
+    removed_count = 0
+    processed_files_count = 0
+
+    print(f"在目录 '{image_directory_path}' 中找到 {total_items} 个条目 (文件或文件夹)。")
+
+    # 遍历目录中的每个条目
+    for i, item_name in enumerate(items_in_directory):
+        full_path = os.path.join(image_directory_path, item_name) # 构建完整路径
+
+        # 跳过不是文件的条目（例如，子文件夹）
+        if not os.path.isfile(full_path):
+            print(f"Skipping (not a file): {item_name}")
+            continue
+
+        processed_files_count += 1 # 只对文件进行计数和处理
+
+        # 打印当前处理进度（文件计数），不换行
+        print(f"Processing file {processed_files_count}/{total_items} ({i+1}/{total_items} total items): {item_name}... ", end='')
+
+        try:
+            # 尝试使用 Pillow 打开图片文件
+            # 使用 'with' 语句确保文件资源被正确管理和关闭
+            with Image.open(full_path) as img:
+                # 尝试加载图片数据。这通常会检测文件是否损坏或格式是否无效。
+                # 如果文件是无效的，img.load() 会抛出异常。
+                img.load()
+                # 如果你特别需要检查并处理 EXIF 方向信息，可以保留下面这行：
+                # ImageOps.exif_transpose(img)
+
+            # 如果上面代码没有抛出异常，说明图片是有效的
+            print("OK")
+
+        except Exception as e:
+            # 如果在打开或加载图片时发生任何异常，说明文件有问题
+            print(f"Error: {type(e).__name__} - {e}") # 打印异常类型和信息
+            print(f"Removing invalid file: {item_name}") # 提示将要删除文件
+
+            try:
+                # 删除无效的文件
+                os.remove(full_path)
+                removed_count += 1
+                print("File removed successfully.")
+            except Exception as remove_e:
+                # 如果在删除文件时发生错误（例如权限问题）
+                print(f"Error removing file {item_name}: {remove_e}")
+
+    print(f"\n--- 检查结束 ---")
+    print(f"总共检查文件数： {processed_files_count}")
+    print(f"移除无效文件数： {removed_count}")
+    # 注意：这里无法准确计算剩余文件，因为 os.listdir() 是在开始时获取的列表，
+    # 且可能包含其他类型的文件或删除失败的文件。processed_files_count 是实际检查过的文件数。
+    print(f"请重新查看目录 '{image_directory_path}' 确认剩余文件。")
+
+
+if __name__ == "__main__":
+    # 运行主函数
+    main()
+
+现在需要根据图片生成一个csv文件 到了这个步骤
+
 
 
 
