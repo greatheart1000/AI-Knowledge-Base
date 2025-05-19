@@ -1,7 +1,12 @@
 #LLaMA-Factory 微调Qwen2.5VL 链接  https://zhuanlan.zhihu.com/p/1903485169010210107
 # swanlab API Key : wFExi1nV5osUmt0EpAMAs
+# 命令 nohup python car_train.py > app.log 2>&1 &
+
 import os,csv
 import torch
+torch.cuda.empty_cache()
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+torch.backends.cudnn.benchmark = True
 from datasets import Dataset
 from modelscope import snapshot_download, AutoTokenizer
 from swanlab.integration.transformers import SwanLabCallback
@@ -182,6 +187,24 @@ swanlab_callback = SwanLabCallback(
         "lora_dropout": 0.1,
     },
 )
+""" A100训练的
+args = TrainingArguments(
+  output_dir="./output",
+  per_device_train_batch_size=24,    # 拉大一点
+  gradient_accumulation_steps=2,     # 减少累积
+  bf16=True,
+  fp16=False,
+  gradient_checkpointing=True,       # 如果显存吃紧，就开；不吃紧可关
+  deepspeed="ds_stage3.json",        # 深度零冗余 offload（选配）
+  dataloader_num_workers=12,
+  dataloader_pin_memory=True,
+  prefetch_factor=4,
+  optim="adamw_torch",
+  logging_steps=10,
+  save_steps=100,
+  report_to="none",
+)"""
+
 
 # 配置Trainer
 trainer = Trainer(
