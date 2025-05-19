@@ -234,6 +234,24 @@ if __name__ == "__main__":
 
 现在需要根据图片生成一个csv文件 到了这个步骤
 
+import os
+import pandas as pd
+image_directory= 'train_images'
+csv_file_path ='train_reduced.csv'
+output_csv_path= 'filtered_data.csv' # 你希望保存结果的新 CSV 文件路径
+alist_set = os.listdir(image_directory)
+
+df = pd.read_csv('train_reduced.csv')
+print(f"成功读取 CSV 文件: {csv_file_path}，共 {len(df)} 行数据。")
+print("正在从 URL 中提取文件名...")
+df['extracted_filename'] = df['url'].str.rsplit('/', 1).str[-1]
+is_in_alist = df['extracted_filename'].isin(alist_set)
+# 使用布尔型 Series 来筛选 DataFrame
+filtered_df = df[is_in_alist].copy()
+print(f"筛选完成。共找到 {len(filtered_df)} 行数据在图片目录中有对应的文件。")
+# 5. 将筛选后的 DataFrame 保存到新的 CSV 文件
+filtered_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
+print(f"\n成功将筛选后的数据保存到：\n    {output_csv_path}")
 
 
 
