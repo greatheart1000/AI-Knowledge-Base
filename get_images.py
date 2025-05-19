@@ -232,27 +232,57 @@ if __name__ == "__main__":
     # 运行主函数
     main()
 
-现在需要根据图片生成一个csv文件 到了这个步骤
+现在需要根据图片生成一个csv文件 到了这个步骤 并且每个图片只保存一行数据
 
 import os
 import pandas as pd
-image_directory= 'train_images'
-csv_file_path ='train_reduced.csv'
+
+# —— 配置区 ——
+image_directory = 'train_images' # 包含图片的目录路径
+csv_file_path ='train_reduced.csv' # 你的输入 CSV 文件路径
 output_csv_path= 'filtered_data.csv' # 你希望保存结果的新 CSV 文件路径
-alist_set = os.listdir(image_directory)
+# —— 配置结束 ——
+print(f"--- 开始处理 ---")
+# 1. 获取图片目录中的文件名列表，并转换为集合以便快速查找
 
-df = pd.read_csv('train_reduced.csv')
+# 获取目录中的所有文件和文件夹列表
+# 重要的修正：alist_set 应该是一个集合 (set)
+alist_set = set(os.listdir(image_directory))
+print(f"在目录 '{image_directory}' 中找到 {len(alist_set)} 个唯一文件/文件夹名。") # 打印集合大小
+
+# 2. 读取 CSV 文件到 DataFrame
+df = pd.read_csv(csv_file_path)
 print(f"成功读取 CSV 文件: {csv_file_path}，共 {len(df)} 行数据。")
-print("正在从 URL 中提取文件名...")
-df['extracted_filename'] = df['url'].str.rsplit('/', 1).str[-1]
-is_in_alist = df['extracted_filename'].isin(alist_set)
-# 使用布尔型 Series 来筛选 DataFrame
-filtered_df = df[is_in_alist].copy()
-print(f"筛选完成。共找到 {len(filtered_df)} 行数据在图片目录中有对应的文件。")
-# 5. 将筛选后的 DataFrame 保存到新的 CSV 文件
-filtered_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
-print(f"\n成功将筛选后的数据保存到：\n    {output_csv_path}")
 
+# 3. 从 'url' 列中提取文件名
+print("正在从 URL 中提取文件名...")
+# 使用 pandas 的 apply 或 str 方法提取文件名
+df['extracted_filename'] = df['url'].apply(lambda x: x.split('/')[-1] if isinstance(x, str) else None)
+# 更推荐使用 str 方法，通常更高效
+#df['extracted_filename'] = df['url'].str.rsplit('/', 1).str[-1]
+
+
+# 4. 根据提取的文件名是否在 `alist_set` 中来筛选 DataFrame (初筛)
+print("正在根据图片目录中的文件列表进行初步筛选...")
+is_in_alist = df['extracted_filename'].isin(alist_set)
+# 筛选出匹配的行
+filtered_df = df[is_in_alist].copy() # 使用 .copy()
+print(f"初步筛选完成。共找到 {len(filtered_df)} 行数据对应的文件名在图片目录列表中。")
+# 5. 去除基于文件名的重复行，只保留每张图片对应的第一行数据
+if not filtered_df.empty:
+    print("正在去除基于文件名的重复行...")
+    # drop_duplicates 根据 'extracted_filename' 列去除重复行，默认保留第一次出现的行
+    deduplicated_df = filtered_df.drop_duplicates(subset=['extracted_filename']).copy()
+    print(f"去除重复行完成。最终保留 {len(deduplicated_df)} 行数据。")
+    # 6. 将去除重复后的 DataFrame 保存到新的 CSV 文件
+    try:
+        deduplicated_df.to_csv(output_csv_path, index=False, encoding='utf-8-sig')
+        print(f"\n🎉 成功将去重后的数据保存到：\n    {output_csv_path}")
+    except Exception as e:
+        print(f"保存文件时发生错误：{e}")
+else:
+     print("\n初步筛选后没有找到匹配的行，未进行去重和生成输出 CSV 文件。")
+print("--- 处理结束 ---")
 
 
 # images2csv.py 文件 把images文件转为 csv
