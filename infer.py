@@ -241,7 +241,7 @@ with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
     for fn in sorted(os.listdir(test_dir)):
         img_path = os.path.join(test_dir, fn)
         pred = predict_one(img_path, prompt_text)
-        print(f"{fn} -> {pred}")
+        print(f"{fname} -> {pred}", flush=True)
         writer.writerow([fn, pred])
 
 print("推理完成，结果写入", OUT_CSV)
