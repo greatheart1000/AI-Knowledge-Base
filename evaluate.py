@@ -3,7 +3,33 @@
 2） 测试用了 多少图 ？   # 824张图片 （含 76点位？）
 3）每个位置　，对得多少，　错得多少？　要有个比率
 
+训练集或者测试集里面每个类别的个数
+import pandas as pd
+# 1. 读入 CSV（根据需要加上 encoding、sep 等参数）
+df = pd.read_csv(r"C:\Users\great\Downloads\filtered_data.csv")
+# 2. 按四列分组，统计每一类的样本数量
+grouped = (
+    df
+    .groupby(
+        ["task_type_name", "material_type_name", "point_type_name", "point_name"],
+        dropna=False  # 如果要把 NaN 也算一种类，可以保留这一行
+    )
+    .size()       # 统计每个组合的行数
+    .reset_index(name="count")
+)
+# 3. 总共多少类
+total_classes = grouped.shape[0]
 
+# 4. 输出结果
+print(f"总共 {total_classes} 类")
+print(grouped)
+grouped['type'] =grouped['task_type_name']+grouped['material_type_name']+':'+grouped['point_type_name']+'/'+grouped['point_name']
+grouped.to_csv("grouped_counts.csv", index=False)
+
+
+
+
+总的准确率 
 import os
 import pandas as pd
 # 2. 读取 CSV 文件到 DataFrame
