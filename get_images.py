@@ -69,6 +69,154 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"发生错误: {e}")
 
+
+新版的下载图片的代码
+import os
+import time
+import threading
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import pandas as pd
+import requests
+
+def download_image(session, url, save_dir,
+                   max_retries=3,
+                   retry_delay=5,
+                   timeout=30):
+    """
+    用给定的 session 下载单张图片，重试、超时、保存到 save_dir
+    返回 (True, url, filepath) 或 (False, url, error_msg)
+    """
+    fname = os.path.basename(urlparse(url).path)
+    fpath = os.path.join(save_dir, fname)
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = session.get(url, stream=True, timeout=timeout)
+            resp.raise_for_status()
+            with open(fpath, 'wb') as fp:
+                for chunk in resp.iter_content(8192):
+                    fp.write(chunk)
+            return True, url, fpath
+        except Exception as e:
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+            else:
+                return False, url, str(e)
+
+def download_images(urls, save_dir,
+                    num_threads=10,
+                    max_retries=3,
+                    retry_delay=5,
+                    timeout=30):
+    """
+    并发下载 urls 列表中的图片到 save_dir。
+    返回 (succeeded_count, failed_count)
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    total = len(urls)
+    succeeded = 0
+    failed    = 0
+    lock      = threading.Lock()
+    # 每个线程一个 Session
+    thread_local = threading.local()
+    def get_session():
+        if not hasattr(thread_local, "session"):
+            thread_local.session = requests.Session()
+        return thread_local.session
+
+    with ThreadPoolExecutor(max_workers=num_threads) as pool:
+        futures = {pool.submit(
+            download_image,
+            get_session(), url, save_dir,
+            max_retries, retry_delay, timeout
+        ): url for url in urls}
+
+        for i, fut in enumerate(as_completed(futures), start=1):
+            ok, url_or_err, info = fut.result()
+            with lock:
+                if ok:
+                    succeeded += 1
+                else:
+                    failed += 1
+
+                # 每 200 张打印一次进度
+                if i % 200 == 0 or i == total:
+                    print(f"[PROGRESS] 本轮已处理 {i}/{total} (✔{succeeded} ✘{failed})",
+                          flush=True)
+
+            # 单条日志
+            if ok:
+                print(f"[✔] {url_or_err} → {info}", flush=True)
+            else:
+                print(f"[✘] {url_or_err} 错误: {info}", flush=True)
+
+    return succeeded, failed
+
+if __name__ == "__main__":
+    # 用户配置
+    data_file    = "train.xlsx"   # 支持 .csv/.xls/.xlsx
+    url_column   = "url"
+    save_dir     = "downloaded_images"
+    num_threads  = 20             # 并发线程数
+    max_retries  = 3
+    retry_delay  = 5
+    timeout      = 30
+    target_ratio = 0.95           # 期望下载比例
+
+    # 1) 读取 URL 列
+    ext = os.path.splitext(data_file)[1].lower()
+    if ext in (".xls", ".xlsx"):
+        df = pd.read_excel(data_file)
+    else:
+        df = pd.read_csv(data_file)
+    urls = df[url_column].dropna().astype(str).tolist()
+    total_urls = len(urls)
+    print(f"[START] 共 {total_urls} 条 URL，目标下载率 {target_ratio*100:.0f}%", flush=True)
+
+    # 2) 循环下载
+    last_remaining = None
+    while True:
+        # 2.1) 找出尚未下载的 URL
+        missing = []
+        for url in urls:
+            fname = os.path.basename(urlparse(url).path)
+            if not os.path.exists(os.path.join(save_dir, fname)):
+                missing.append(url)
+
+        downloaded = total_urls - len(missing)
+        ratio = downloaded / total_urls
+        print(f"[CHECK] 已下载 {downloaded}/{total_urls} ({ratio*100:.2f}%)", flush=True)
+
+        # 2.2) 如果达到目标或已经没有新进展，则退出
+        if ratio >= target_ratio:
+            print(f"[DONE] 已达到 {ratio*100:.2f}% ≥ {target_ratio*100:.0f}%，结束。", flush=True)
+            break
+        if last_remaining == len(missing):
+            print("[WARN] 本轮未下载到任何新文件，可能都失败了，结束循环。", flush=True)
+            break
+        last_remaining = len(missing)
+
+        # 2.3) 对未下载的 URL 进行一次并发下载
+        print(f"[LOOP] 本轮需下载 {len(missing)} 张，启动并发下载…", flush=True)
+        suc, fail = download_images(
+            missing, save_dir,
+            num_threads=num_threads,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            timeout=timeout
+        )
+        print(f"[LOOP DONE] 本轮完成：成功 {suc}, 失败 {fail}", flush=True)
+
+        # 2.4) 可选休眠，避免一直打满带宽
+        time.sleep(5)
+
+    print("[ALL DONE] 脚本结束。", flush=True)
+    
+上面是新版的下载图片的代码
+
+
+
 查看images文件夹有多少张图片的脚本
 import os
 import sys
