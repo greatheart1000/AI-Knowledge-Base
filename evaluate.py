@@ -27,6 +27,25 @@ grouped['type'] =grouped['task_type_name']+grouped['material_type_name']+':'+gro
 grouped.to_csv("grouped_counts.csv", index=False)
 
 
+#基于 pandas 的示例，一次性完成“按四列分组，每组随机取最多 30 条，不足 30 条就全部取出”的需求
+import pandas as pd
+# 1. 读入数据
+df = pd.read_csv("remaining_images.csv")
+
+# 2. 分组并抽样
+# group_keys=False 保证输出时不再多一层分组索引
+sampled = (
+    df
+    .groupby(
+        ["task_type_name", "material_type_name", "point_type_name", "point_name"],
+        group_keys=False
+    )
+    .apply(lambda g: g.sample(n=min(len(g), 30), random_state=42))
+    .reset_index(drop=True)
+)
+# 3. 保存结果
+sampled.to_csv("sampled_images.csv", index=False)
+
 
 
 总的准确率 
