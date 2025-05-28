@@ -1,3 +1,5 @@
+nohup python infer.py > app.log 2>&1 &
+
 import os
 import csv
 from PIL import Image
@@ -245,3 +247,132 @@ with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer.writerow([fn, pred])
 
 print("推理完成，结果写入", OUT_CSV)
+
+
+每做完一张图片的推理，就立刻把结果追加到 CSV 并 flush+fsync，保证即使中途被 Ctrl+C 或系统杀掉，已有结果也都落盘
+
+import os
+import csv
+from PIL import Image
+import torch
+
+# —— 1. 环境变量，减小碎片
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+torch.backends.cudnn.benchmark = True
+
+# —— 2. 预加载：tokenizer/processor
+from transformers import AutoTokenizer, AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from peft import LoraConfig, PeftModel
+from qwen_vl_utils import process_vision_info
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "/root/autodl-tmp/models", use_fast=False, trust_remote_code=True
+)
+processor = AutoProcessor.from_pretrained(
+    "/root/autodl-tmp/models",
+    min_pixels=256*28*28,
+    max_pixels=1280*28*28,
+)
+
+# —— 3. 加载 base 模型（8bit + fp16 + offload + 自动 device_map）
+base_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    "/root/autodl-tmp/models",
+    device_map="auto",
+    torch_dtype=torch.float16,
+    load_in_8bit=True,
+    offload_folder="offload",
+    trust_remote_code=True,
+)
+
+# —— 4. 加载 LoRA 权重
+val_config = LoraConfig(
+    task_type="CAUSAL_LM",
+    target_modules=[
+        "q_proj", "k_proj", "v_proj", "o_proj",
+        "gate_proj", "up_proj", "down_proj"
+    ],
+    inference_mode=True,
+    r=64, lora_alpha=16, lora_dropout=0.05,
+    bias="none",
+)
+model = PeftModel.from_pretrained(
+    base_model,
+    "checkpoint4884",
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+
+# —— 5. 推理准备
+model.eval()
+torch.cuda.empty_cache()
+
+def predict_one(image_path, text_prompt):
+    """
+    给定一张图和一段文字 prompt，返回生成结果
+    """
+    messages = [{
+        "role": "user",
+        "content": [
+            {"type": "image", "image": image_path},
+            {"type": "text",  "text": text_prompt}
+        ]
+    }]
+    chat_text = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = processor(
+        text=[chat_text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    ).to(model.device, torch.float16)
+
+    with torch.no_grad():
+        generated = model.generate(
+            **inputs,
+            max_new_tokens=64,
+            use_cache=False,
+            do_sample=False
+        )
+
+    gen_ids = generated[0][ inputs["input_ids"].size(1): ]
+    return processor.decode(
+        gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
+
+# —— 6. 批量推理并“随写随存”
+OUT_CSV = "predictions.csv"
+prompt_text = "请你分析一下此图片为汽车的内饰图片还是外饰图片,是什么点位类型、是什么点位名称:"
+test_dir = "/root/autodl-tmp/test_images"
+
+# 如果文件不存在，先写入表头
+if not os.path.exists(OUT_CSV):
+    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f_header:
+        writer = csv.writer(f_header)
+        writer.writerow(["item", "prediction"])
+        f_header.flush()
+        os.fsync(f_header.fileno())
+
+# 遍历并每条马上 append
+for fname in sorted(os.listdir(test_dir)):
+    img_path = os.path.join(test_dir, fname)
+    try:
+        pred = predict_one(img_path, prompt_text)
+    except Exception as e:
+        # 某张图失败也不要整体挂
+        print(f"[ERROR] {fname} 产生异常：{e}", flush=True)
+        pred = f"!!ERROR!! {e}"
+
+    # 打印到 stdout（nohup 重定向后会落到 app.log）
+    print(f"{fname} -> {pred}", flush=True)
+
+    # 追加写 csv 并立刻 flush + fsync
+    with open(OUT_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([fname, pred])
+        f.flush()
+        os.fsync(f.fileno())
+
+print("全部推理完毕 ✅", flush=True)
