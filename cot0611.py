@@ -124,3 +124,19 @@ for index, row in mismatched_df.iterrows():
     except Exception as e:
         print(e)
         time.sleep(0.005)
+
+#读取生成的jsonl 然后与之前的进行组合成强化学习的数据集 
+num =0
+with open('reason_cot.jsonl' , 'r',encoding='utf-8') as f:
+    for line in f:
+        data = json.loads(line)
+        image_url = data['image_url']
+        task_type='外观'
+        point_type =data['point_type']
+        point_name =data['point_name']
+        model_cot= data['model_cot']
+        # 正则表达式模式
+        cleaned_model_cot = model_cot.replace('\n', '').replace('\r', '')
+        cleaned_model_cot = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', cleaned_model_cot)  # 移除ASCII控制字符和扩展ASCII控制字符
+        parsed_cot = json.loads(cleaned_model_cot)
+        print(parsed_cot['reason'])
