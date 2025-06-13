@@ -8,7 +8,7 @@ swift export \
     --model_type qwen2_5_vl \
     --merge_lora true
 
-push_to_hub.sh 推送模型至modelscope脚本
+push_to_hub.sh 推送模型至modelscope脚本 <br>
 swift export \
     --adapters /root/autodl-tmp/checkpoint0613 \
     --model /root/autodl-tmp/QwenVLmerged \
@@ -18,8 +18,8 @@ swift export \
     --hub_token 'e333fcb9-d4cb-452d-9ae6-59ab02f7b227' \
     --use_hf false
 
-vllm serve QwenVL0613 --port 8000 --served-model-name gpt-4 部署模型命令
-聊天接口
+vllm serve QwenVL0613 --port 8000 --served-model-name gpt-4 部署模型命令 <br>
+聊天接口 <br>
 curl -X POST http://127.0.0.1:8000/v1/chat/completions \
      -H "Content-Type: application/json" \
      -d '{
@@ -31,7 +31,7 @@ curl -X POST http://127.0.0.1:8000/v1/chat/completions \
            "max_tokens": 200
          }'
 
-文本补全接口
+文本补全接口 <br>
 curl -X POST http://127.0.0.1:8000/v1/completions \
      -H "Content-Type: application/json" \
      -d '{
@@ -39,8 +39,8 @@ curl -X POST http://127.0.0.1:8000/v1/completions \
            "prompt": "写一段关于春天的诗：",
            "max_tokens": 100,
            "temperature": 0.8
-         }'
-发送带图片和文本的请求
+         }' <br>
+发送带图片和文本的请求 <br>
  curl -X POST http://127.0.0.1:8000/v1/chat/completions      -H "Content-Type: application/json"      -d '{
           "model": "gpt-4",
           "messages": [
@@ -59,4 +59,4 @@ curl -X POST http://127.0.0.1:8000/v1/completions \
             }
           ],
           "max_tokens": 300
-        }'
+        }' 
