@@ -1,7 +1,6 @@
 ## 懂车帝项目
 
-
-我还需记录markdown的快捷键 
+autodl 数据上传 scp远程拷贝文件的指令为：scp -rP 35394 <本地文件/文件夹> root@region-1.autodl.com:/root/autodl-tmp
 
 python tools/train.py configs/resnet/resnet101_8xb16_cifar10.py<br>
 https://verl.readthedocs.io/en/latest/examples/multi_modal_example.html
