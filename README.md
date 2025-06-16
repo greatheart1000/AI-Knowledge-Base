@@ -1,4 +1,6 @@
 ## 懂车帝项目
+
+
 我还需记录markdown的快捷键 
 python tools/train.py configs/resnet/resnet101_8xb16_cifar10.py<br>
 https://verl.readthedocs.io/en/latest/examples/multi_modal_example.html
@@ -21,6 +23,7 @@ swift export \
     --use_hf false
 
 vllm serve QwenVL0613 --port 8000 --served-model-name gpt-4 部署模型命令 <br>
+nohup python batch_msg.py > app.log 2>&1 <br>
 聊天接口 <br>
 curl -X POST http://127.0.0.1:8000/v1/chat/completions \
      -H "Content-Type: application/json" \
