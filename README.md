@@ -1,4 +1,7 @@
 ## 懂车帝项目
+火山gpu 服务器登录信息：
+ssh caijian@118.145.200.164
+P@ssw0rd!Qw3rTy#ZxCu98&JkLm@12
 
 autodl 数据上传 scp远程拷贝文件的指令为：scp -rP 35394 <本地文件/文件夹> root@region-1.autodl.com:/root/autodl-tmp
 bash run_scripts/muge_finetune_vit-b-14.sh   <br>
