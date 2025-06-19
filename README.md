@@ -1,8 +1,8 @@
 ## 懂车帝项目
-OSError: image file is truncated报错解决 
-解决办法： 
-from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+OSError: image file is truncated报错解决  <br>
+解决办法：  <br>
+from PIL import ImageFile  <br>
+ImageFile.LOAD_TRUNCATED_IMAGES = True <br>
 
 autodl 数据上传 scp远程拷贝文件的指令为：scp -rP 35394 <本地文件/文件夹> root@region-1.autodl.com:/root/autodl-tmp
 bash run_scripts/muge_finetune_vit-b-14.sh   <br>
