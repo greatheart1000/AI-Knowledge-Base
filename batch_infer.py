@@ -1,126 +1,99 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# @Time    : 2025/6/16 9:59
-# @Author  : caijian
-# @File    : batch_msg.py
-# @Software: PyCharm
 import os
-import time
+import math
 import json
-import requests
+import torch
 import pandas as pd
-import re
-# --- 配置 ---
-API_URL = "http://127.0.0.1:8000/v1/chat/completions"
-headers = {"Content-Type": "application/json"}
-INPUT_CSV = "Random_Unique_PointName_Images.csv"
-OUTPUT_CSV = "inference_results.csv"
-MODEL = "gpt-4"
-MAX_TOKENS = 500
-SLEEP_INTERVAL = 0.5   # 两次请求之间暂停秒数，防止速率过快被限流
+from PIL import Image
+from torchvision import transforms
+from model import resnet34
 
-# 读取待推理的 CSV
-df = pd.read_csv(INPUT_CSV, encoding="utf-8")
-if "url" not in df.columns:
-    raise ValueError(f"输入 CSV {INPUT_CSV} 中找不到 'url' 列")
+def batch_infer(
+    metadata_csv: str,
+    class_indices_json: str,
+    weights_path: str,
+    batch_size: int = 10,
+    output_csv: str = "test_metadata_with_pred.csv",
+    log_interval: int = 100,       # 每多少张图片打印一次
+):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"[START] using device: {device}")
 
-results = []
+    # 1. 读入 metadata
+    df = pd.read_csv(metadata_csv)
+    assert "local_path" in df.columns and "point_name" in df.columns, \
+        "CSV 必须包含 local_path 和 point_name 两列"
+    n = len(df)
 
-with open("point_mapping.json", 'r', encoding='utf-8') as f:
-    mapping = json.load(f)
+    # 2. 图像预处理
+    data_transform = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],
+                             [0.229, 0.224, 0.225])
+    ])
 
-mapping_str = json.dumps(mapping, ensure_ascii=False, indent=2)
+    # 3. class_indict
+    with open(class_indices_json, "r") as f:
+        class_indict = json.load(f)  # {"0":"baking_cakes", ...}
 
-# 定义 CSV 文件的列名
-output_columns = [
-    "url",
-    "task_type_name",
-    "point_type_name",
-    "point_name",
-    "pred_task_type",
-    "pred_point_type",
-    "pred_point_name" # 这里修正了原始代码中的重复 point_name 列
-]
+    # 4. 模型加载
+    model = resnet34(num_classes=len(class_indict)).to(device)
+    assert os.path.exists(weights_path), f"找不到模型权重 {weights_path}"
+    sd = torch.load(weights_path, map_location=device, weights_only=True)
+    model.load_state_dict(sd)
+    model.eval()
 
-# 在循环开始前，如果输出文件不存在，则写入头部
-# 如果文件已存在，则直接追加，不写入头部
-OUTPUT_CSV = "inference_results.csv" 
-if not os.path.exists(OUTPUT_CSV):
-    pd.DataFrame(columns=output_columns).to_csv(OUTPUT_CSV, index=False, encoding="utf-8-sig")
-    print(f"创建新的输出文件: {OUTPUT_CSV}")
-else:
-    print(f"输出文件 {OUTPUT_CSV} 已存在，将追加数据。")
+    # 准备输出列
+    df["predicted"] = ""
+    df["correct"]   = False
 
+    processed = 0  # 全局已处理图片数
 
-for idx, row in df.iterrows():
-    image_url = row["url"]
-    task_type_name=row['task_type_name']
-    point_type_name =row['point_type_name']
-    point_name =row['point_name']
-    if (idx+1)%10==0:
-        print(f"[{idx+1}/{len(df)}] 处理图片: {image_url}",flush=True)
-    # 构造请求体
-    payload = {
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text",     "text": f"""你是汽车图像分类专家。
-下面给出了所有合法的二级点位类型(point_type_name) (辅助图,整体外观,其他细节)及其对应的三级点位名称(point_name)列表：
-{mapping_str}
-请你按照严格的三步推理流程，结合给定的图片，生成符合逻辑的推理过程：
-1. 第一步：确认这是一张“外观”图片，并简要说明依据。
-2. 第二步：从上述 point_type_name 列表中，选择最符合的那一项，并说明理由。
-3. 第三步：在选中的 point_type_name 对应的点位名称列表里，选择最符合的 point_name，并说明理由。
+    with torch.no_grad():
+        steps = math.ceil(n / batch_size)
+        for step in range(steps):
+            batch_df = df.iloc[step*batch_size : (step+1)*batch_size]
+            imgs, idxs = [], []
+            for idx, row in batch_df.iterrows():
+                try:
+                    img = Image.open(row["local_path"]).convert("RGB")
+                    imgs.append(data_transform(img))
+                    idxs.append(idx)
+                except Exception as e:
+                    print(f"[WARN] 无法打开 {row['local_path']}，跳过：{e}")
 
-在推理过程中，请确保你的解释和理由能够合理支持给定的答案。
+            if not imgs:
+                continue
 
-最后，请仅输出一个有效 JSON：
-{{"task_type": "外观", "point_type": "…", "point_name": "…"}}
-请开始你的推理过程："""},
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                ]
-            }
-        ],
-        "max_tokens": MAX_TOKENS
-    }
+            batch_tensor = torch.stack(imgs, dim=0).to(device)
+            out = model(batch_tensor).cpu()
+            probs = torch.softmax(out, dim=1)
+            preds = torch.argmax(probs, dim=1).numpy()
 
-    # 4. 发送请求
-    response = requests.post( "http://127.0.0.1:8000/v1/chat/completions", headers=headers, json=payload)
-     # 5. 处理响应
-    if response.status_code == 200:
-        data = response.json()
-        text = data["choices"][0]["message"]["content"]
-        match = re.search(r'\{[^}]*\}', text)
-        current_result = {
-            "url": image_url,
-            "task_type_name": task_type_name,
-            "point_type_name": point_type_name,
-            "point_name": point_name,
-            "pred_task_type": "", # 默认值
-            "pred_point_type": "", # 默认值
-            "pred_point_name": "" # 默认值
-        }
-        if match:
-            json_string = match.group(0)
-            if (idx+1)%10==0:
-                print("result:",json_string,flush=True)
-            try:
-                parsed = json.loads(json_string)
-                current_result["pred_task_type"] = parsed.get("task_type", "")
-                current_result["pred_point_type"] = parsed.get("point_type", "")
-                current_result["pred_point_name"] = parsed.get("point_name", "")
-            except json.JSONDecodeError:
-                print(f"警告：无法解析 JSON 字符串: {json_string} for URL: {image_url}")
-           
-        else:
-            print(f"请求失败，状态码：{response.status_code}",)
-            print(response.text)
-        pd.DataFrame([current_result], columns=output_columns).to_csv(
-            OUTPUT_CSV, mode='a', header=False, index=False, encoding="utf-8-sig"
-        )
-        time.sleep(0.1)
+            # 填回 df 并打印（每 log_interval 张）
+            for local_idx, cls_idx in zip(idxs, preds):
+                pred_label = class_indict[str(int(cls_idx))]
+                df.at[local_idx, "predicted"] = pred_label
+                df.at[local_idx, "correct"]   = (pred_label == df.at[local_idx, "point_name"])
+                processed += 1
 
-print(f"\n全部完成，结果已保存到 {OUTPUT_CSV}")
+                # 如果达到打印间隔，就把最近这一张也打印出来
+                if processed % log_interval == 0 or processed == n:
+                    print(f"[PROGRESS] {processed}/{n} images processed, "
+                          f"last prediction: {df.at[local_idx, 'local_path']} => {pred_label}, "
+                          f"correct: {df.at[local_idx, 'correct']}")
+
+    # 5. 保存结果
+    df.to_csv(output_csv, index=False, encoding="utf-8-sig")
+    print(f"[DONE] all done, saved to {output_csv}")
+
+if __name__ == "__main__":
+    batch_infer(
+        metadata_csv       = "test_metadata.csv",
+        class_indices_json = "./class_indices.json",
+        weights_path       = "./resNet34_100.pth",
+        batch_size         = 10,
+        output_csv         = "test_metadata_with_pred.csv",
+        log_interval       = 100
+    )
