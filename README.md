@@ -4,6 +4,10 @@ OSError: image file is truncated报错解决  <br>
 from PIL import ImageFile  <br>
 ImageFile.LOAD_TRUNCATED_IMAGES = True <br>
 
+git地址: http://139.159.201.66:8888/dcp-platform-group/isoftstone-dcarpai-ai  <br>
+git 账号:1352744183@qq.com  密码: P@ssw0rd!Qw3rTy#ZxCu98&JkLm@12   <br>
+
+
 autodl 数据上传 scp远程拷贝文件的指令为：scp -rP 35394 <本地文件/文件夹> root@region-1.autodl.com:/root/autodl-tmp
 bash run_scripts/muge_finetune_vit-b-14.sh   <br>
 后台运行 nohup bash run_scripts/muge_finetune_vit-b-14.sh > app.log 2>&1 &  <br>
