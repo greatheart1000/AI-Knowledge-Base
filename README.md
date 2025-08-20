@@ -1,3 +1,12 @@
+## 阿里云镜像加速器地址
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://q34m72kp.mirror.aliyuncs.com"]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
 
 ## 怎么提高结构化数据召回准确率？怎么提高非结构化数据召回准确率？ bm25+向量检索 还有什么其他方法优化吗
 
