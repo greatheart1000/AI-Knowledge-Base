@@ -1,3 +1,7 @@
+账号tanthao2546a@gmail.com <br>
+密码PAdUQkSqlXXhanm  <br>
+辅助邮箱malachigrant3@hotmail.com <br>
+
 ## 阿里云镜像加速器地址
 sudo mkdir -p /etc/docker
 sudo tee /etc/docker/daemon.json <<-'EOF'
