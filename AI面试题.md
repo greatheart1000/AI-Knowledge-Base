@@ -56,6 +56,345 @@
 7. 在线学习与反馈闭环
    - 收集点击、停留、转化等信号，在线微调检索模型（强化学习或带反馈的 LTR）
    - 实时更新词表／向量索引，慢慢适应用户口味变化
+   - 
+给出一个基于 Python＋Elasticsearch 的示例，把伪反馈（PRF）、拼写纠错、同义词扩展、NER＋实体链接、会话上下文一起串成一个 Query-Expansion Pipeline，并最终打包成一个 ES DSL 去检索
+```
+# requirements:
+# pip install elasticsearch spellchecker spacy nltk
+# python -m spacy download en_core_web_sm
+# python -c "import nltk; nltk.download('stopwords')"
+
+from elasticsearch import Elasticsearch
+from spellchecker import SpellChecker
+import spacy
+import nltk
+from nltk.corpus import stopwords, wordnet
+from collections import Counter
+import re
+
+# —— 初始化全局对象 —— #
+es = Elasticsearch("http://localhost:9200")
+spell = SpellChecker()
+nlp = spacy.load("en_core_web_sm")
+STOPWORDS = set(stopwords.words("english"))
+
+# —— 1. 拼写纠错 —— #
+def correct_spelling(query: str) -> str:
+    tokens = query.split()
+    corrected = []
+    for tk in tokens:
+        if tk.lower() in spell:
+            corrected.append(tk)
+        else:
+            corrected.append(spell.correction(tk))
+    return " ".join(corrected)
+
+# —— 2. NER 抽实体 —— #
+def extract_entities(query: str):
+    doc = nlp(query)
+    ents = [ent.text for ent in doc.ents]
+    return ents
+
+# —— 3. 同义词扩展 (WordNet) —— #
+def get_synonyms(token: str, maxn=3):
+    syns = set()
+    for syn in wordnet.synsets(token):
+        for lemma in syn.lemmas():
+            w = lemma.name().replace("_", " ")
+            if w.lower() != token.lower():
+                syns.add(w)
+            if len(syns) >= maxn:
+                break
+        if len(syns) >= maxn:
+            break
+    return list(syns)
+
+# —— 4. 伪反馈 (PRF)：Top-K 文档中抽高频词 —— #
+def pseudo_relevance_feedback(original_query: str,
+                              index: str,
+                              top_k: int = 5,
+                              top_n_terms: int = 5) -> list:
+    # 初检
+    res = es.search(
+        index=index,
+        body={
+            "size": top_k,
+            "query": {"match": {"content": original_query}}
+        }
+    )
+    # 聚合 top_k 文档内容
+    texts = [hit["_source"]["content"] for hit in res["hits"]["hits"]]
+    # 简易分词、过滤停用词和原 query token
+    cnt = Counter()
+    orig_toks = set(original_query.lower().split())
+    for txt in texts:
+        for w in re.findall(r"\w+", txt.lower()):
+            if w not in STOPWORDS and w not in orig_toks and len(w) > 2:
+                cnt[w] += 1
+    # 取 top_n_terms
+    return [t for t, _ in cnt.most_common(top_n_terms)]
+
+# —— 5. 会话上下文扩展 (上文关键词) —— #
+def context_terms(session_queries: list, maxn=5):
+    cnt = Counter()
+    for q in session_queries:
+        for w in re.findall(r"\w+", q.lower()):
+            if w not in STOPWORDS and len(w) > 2:
+                cnt[w] += 1
+    return [t for t, _ in cnt.most_common(maxn)]
+
+# —— 6. 整合所有扩展 —— #
+def expand_query(query: str,
+                 session_queries: list,
+                 index: str) -> dict:
+    # 1) 拼写
+    q1 = correct_spelling(query)
+    # 2) NER
+    ents = extract_entities(q1)
+    # 3) 同义词
+    syns = []
+    for tk in q1.split():
+        syns += get_synonyms(tk)
+    # 4) PRF
+    prf_terms = pseudo_relevance_feedback(q1, index)
+    # 5) 上下文
+    ctx = context_terms(session_queries)
+
+    # 最终合并
+    must_clauses = [{"match": {"content": q1}}]
+    should_clauses = []
+    for term in ents + syns + prf_terms + ctx:
+        should_clauses.append({"match": {"content": {"query": term, "boost": 0.5}}})
+
+    # 返回 ES DSL
+    return {
+        "query": {
+            "bool": {
+                "must": must_clauses,
+                "should": should_clauses,
+                "minimum_should_match": 0
+            }
+        }
+    }
+
+# —— 7. 执行检索函数 —— #
+def hybrid_search(user_query: str,
+                  session_history: list,
+                  index: str = "my_index",
+                  size: int = 10):
+    dsl = expand_query(user_query, session_history, index)
+    dsl["size"] = size
+    # 这里还可以加上向量检索逻辑 (dense + sparse hybrid)
+    resp = es.search(index=index, body=dsl)
+    return [hit["_source"] for hit in resp["hits"]["hits"]]
+
+# —— 8. 使用示例 —— #
+if __name__ == "__main__":
+    session = [
+        "Who is the CEO of Tesla?",
+        "Show me articles about Elon Musk."
+    ]
+    query = "tesla chages"   # typo on purpose
+    results = hybrid_search(query, session, index="articles", size=5)
+    for doc in results:
+        print("-", doc["title"])
+```
+
+```
+"""
+示例：结构化数据召回＋优化检索 Pipeline
+包含：
+1. Elasticsearch 索引定义（同义词、Field-level Boost、分词器）
+2. Redis 缓存用户上下文预过滤
+3. 构建 ES Query（精确、前缀、范围、Function Score）
+4. 粗排→ML Re‐ranking（LR 模型示例）
+"""
+
+from elasticsearch import Elasticsearch
+import redis
+import joblib      # pip install joblib
+import numpy as np
+
+# ———————— 1. 初始化 ———————— #
+ES = Elasticsearch("http://localhost:9200")
+REDIS = redis.Redis(host="localhost", port=6379, db=0)
+
+INDEX = "products"
+
+# ———————— 2. 创建索引（若已存在可跳过） ———————— #
+if not ES.indices.exists(INDEX):
+    ES.indices.create(
+        index=INDEX,
+        body={
+            "settings": {
+                "analysis": {
+                    "filter": {
+                        # 同义词配置
+                        "synonym_filter": {
+                            "type": "synonym",
+                            "synonyms": [
+                                "手机,mobile phone",
+                                "color,colour",
+                                "电视,television"
+                            ]
+                        }
+                    },
+                    "analyzer": {
+                        # 用于名称字段的同义词分词器
+                        "synonym_analyzer": {
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "synonym_filter"]
+                        },
+                        # 用于描述字段的 n-gram 分词器
+                        "ngram_analyzer": {
+                            "tokenizer": "ngram_tokenizer",
+                            "filter": ["lowercase"]
+                        }
+                    },
+                    "tokenizer": {
+                        "ngram_tokenizer": {
+                            "type": "ngram",
+                            "min_gram": 2,
+                            "max_gram": 4,
+                            "token_chars": ["letter", "digit"]
+                        }
+                    }
+                }
+            },
+            "mappings": {
+                "properties": {
+                    "brand":      {"type": "keyword",   "boost": 2.0},
+                    "model":      {"type": "keyword",   "boost": 1.5},
+                    "name":       {"type": "text",      "analyzer": "synonym_analyzer"},
+                    "description":{"type": "text",      "analyzer": "ngram_analyzer"},
+                    "price":      {"type": "double"},
+                    "release_date":{"type":"date"},
+                    "region":     {"type": "keyword"},
+                    # 业务信号
+                    "click_rate": {"type": "double"},
+                    "inventory":  {"type": "integer"}
+                }
+            }
+        }
+    )
+
+# ———————— 3. 预过滤：用户上下文（如 region） ———————— #
+def get_user_region(user_id: str):
+    # 假设用户 region 保存在 Redis: key="user:{id}:region"
+    region = REDIS.get(f"user:{user_id}:region")
+    return region.decode() if region else None
+
+# ———————— 4. 构建 Elastic DSL ———————— #
+def build_es_query(params: dict, user_region: str):
+    must, filter_clauses = [], []
+
+    # 精确匹配品牌
+    if "brand" in params:
+        must.append({"term": {"brand": params["brand"]}})
+
+    # 前缀搜索型号
+    if "model_prefix" in params:
+        must.append({"prefix": {"model": params["model_prefix"]}})
+
+    # 同义词＆分词搜索名称
+    if "name" in params:
+        must.append({
+            "match": {
+                "name": {
+                    "query": params["name"],
+                    "analyzer": "synonym_analyzer"
+                }
+            }
+        })
+
+    # 范围查询 price
+    if "price_min" in params or "price_max" in params:
+        rng = {}
+        if "price_min" in params: rng["gte"] = params["price_min"]
+        if "price_max" in params: rng["lte"] = params["price_max"]
+        must.append({"range": {"price": rng}})
+
+    # 用户 region 预过滤
+    if user_region:
+        filter_clauses.append({"term": {"region": user_region}})
+
+    # Function Score：price 靠近 target_price 加分
+    functions = []
+    if "target_price" in params:
+        functions.append({
+            "gauss": {
+                "price": {
+                    "origin": params["target_price"],
+                    "scale": 50
+                }
+            }
+        })
+
+    bool_query = {"bool": {"must": must, "filter": filter_clauses}}
+    if functions:
+        return {
+            "function_score": {
+                "query": bool_query,
+                "functions": functions,
+                "score_mode": "avg",
+                "boost_mode": "sum"
+            }
+        }
+    else:
+        return bool_query
+
+# ———————— 5. 粗排 + ML Re‐ranking ———————— #
+# 假设已离线训练好一个 LogisticRegression 排序模型并保存在 ltr_model.pkl
+LTR_MODEL = joblib.load("ltr_model.pkl")  # 特征需与训练时同构
+
+def rerank(docs: list, params: dict):
+    # 为每条文档构建特征向量：[price_diff, click_rate, inventory]
+    X = []
+    for doc in docs:
+        price = doc["_source"]["price"]
+        tp = params.get("target_price", price)
+        price_diff = abs(price - tp)
+        click_rate = doc["_source"].get("click_rate", 0.0)
+        inv = doc["_source"].get("inventory", 0)
+        X.append([price_diff, click_rate, inv])
+    scores = LTR_MODEL.predict_proba(np.array(X))[:, 1]
+    # 按 score 降序重排
+    ranked = [doc for _, doc in sorted(zip(scores, docs), key=lambda x: -x[0])]
+    return ranked
+
+# ———————— 6. 主检索函数 ———————— #
+def search_products(user_id: str, params: dict, top_n=10):
+    user_region = get_user_region(user_id)
+    es_query = build_es_query(params, user_region)
+    body = {"query": es_query, "size": 100}  # 粗排取 top100
+    resp = ES.search(index=INDEX, body=body)
+    hits = resp["hits"]["hits"]
+    # ML Re‐ranking
+    reranked = rerank(hits, params)
+    return reranked[:top_n]
+
+# ———————— 7. 使用示例 ———————— #
+if __name__ == "__main__":
+    # 假设已在 Redis 中预设用户 region
+    REDIS.set("user:alice:region", "US-CA")
+
+    user = "alice"
+    query_params = {
+        "brand": "Apple",
+        "model_prefix": "iPhone",
+        "price_min": 500,
+        "price_max": 1500,
+        "target_price": 999,
+        "name": "手机"
+    }
+    results = search_products(user, query_params, top_n=5)
+    for doc in results:
+        src = doc["_source"]
+        print(f"{src['brand']} {src['model']} | Price: {src['price']} | Score Fields → click_rate:{src.get('click_rate')}, inv:{src.get('inventory')}")
+```
+
+
+
 
 ------
 
@@ -293,5 +632,6 @@ LLM 的上下文窗口大小： 你的 LLM 能够处理多长的上下文？
 计算资源和成本： 复杂切分方法可能需要更多时间和计算资源。
 
 通常建议从简单的固定大小切分开始，然后根据评估结果和具体需求，逐步尝试更复杂的策略，如递归切分、语义切分或多粒度切分，并通过实验来找到最适合你的RAG系统的方案。
+
 
 想了解更多关于 RAG 中切分策略的细节，可以看看这个视频：The BEST Way to Chunk Text for RAG。
