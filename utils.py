@@ -4,8 +4,8 @@ import requests
 from volcengine.auth.SignerV4 import SignerV4
 from volcengine.base.Request import Request
 from volcengine.Credentials import Credentials
-ak = 'AKLTMWRhNmY2ZTZlZTNlNDYxMTk5MzBhOGNlNzczZDU5MGY'
-sk = 'T0dSa1pETTVPR1UyWldVNU5EUXlZVGs1TXpnNU5XVTFOVFJsTnpBek5EWQ=='
+ak = '##############################'
+sk = '##############################'
 method = 'POST'
 DOMAIN = "api-knowledgebase.mlp.cn-beijing.volces.com"
 
@@ -42,4 +42,5 @@ def prepare_request(method, path, ak, sk, params=None, data=None, doseq=0):
     # 生成签名
     credentials = Credentials(ak, sk, "air", "cn-north-1")
     SignerV4.sign(r, credentials)
+
     return r
