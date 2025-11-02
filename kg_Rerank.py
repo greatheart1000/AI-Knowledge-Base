@@ -4,8 +4,8 @@ import os
 
 from volcengine.viking_knowledgebase import VikingKnowledgeBaseService
 viking_knowledgebase_service = VikingKnowledgeBaseService(host="api-knowledgebase.mlp.cn-beijing.volces.com", scheme="https", connection_timeout=30, socket_timeout=30)
-viking_knowledgebase_service.set_ak("AKLTMWRhNmY2ZTZlZTNlNDYxMTk5MzBhOGNlNzczZDU5MGY")
-viking_knowledgebase_service.set_sk("T0dSa1pETTVPR1UyWldVNU5EUXlZVGs1TXpnNU5XVTFOVFJsTnpBek5EWQ==")
+viking_knowledgebase_service.set_ak("----------------------")
+viking_knowledgebase_service.set_sk("----------------------")
 
 
 datas =[{
@@ -27,4 +27,5 @@ datas =[{
     }]
 res = viking_knowledgebase_service.rerank(datas=datas, rerank_model="m3-v2-rerank")
 print(res)
+
 
