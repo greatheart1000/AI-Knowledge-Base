@@ -1,7 +1,7 @@
 #coding:utf-8
 #get_doc用于查看知识库下的某个文档的信息。
-ak = 'AKLTMWRhNmY2ZTZlZTNlNDYxMTk5MzBhOGNlNzczZDU5MGY'
-sk = 'T0dSa1pETTVPR1UyWldVNU5EUXlZVGs1TXpnNU5XVTFOVFJsTnpBek5EWQ=='
+ak = '#####################################################'
+sk = '#####################################################'
 from volcengine.viking_knowledgebase import VikingKnowledgeBaseService
 viking_knowledgebase_service = VikingKnowledgeBaseService(
     host="api-knowledgebase.mlp.cn-beijing.volces.com",
@@ -47,4 +47,5 @@ res = viking_knowledgebase_service.search_knowledge(
 collection_name=collection_name,query=query,
 query_param=None ,pre_processing=pre_processing,
 limit=5, dense_weight=0.5,post_processing=post_processing, project="default")
+
 print(res)
